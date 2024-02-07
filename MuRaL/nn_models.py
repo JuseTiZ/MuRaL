@@ -13,9 +13,14 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn import metrics, calibration
 from scipy.special import lambertw
 
+# For bayesian layers
+from blitz.modules import BayesianLinear, BayesianConv1d, BayesianEmbedding
+from blitz.utils import variational_estimator
+
 from MuRaL.nn_utils import *
 from MuRaL.evaluation import *
 
+@variational_estimator
 class FeedForwardNN(nn.Module):
     """Feedforward only model with local data"""
 
@@ -40,17 +45,17 @@ class FeedForwardNN(nn.Module):
         print('emb_padding_idx: ', emb_padding_idx)
         self.no_of_cat = len(emb_dims)
         
-        #self.emb_layers = nn.ModuleList([nn.Embedding(emb_padding_idx+1, y, padding_idx = emb_padding_idx) for x, y in emb_dims])
-        self.emb_layer = nn.Embedding(emb_padding_idx+1, 5)
+        #self.emb_layers = nn.ModuleList([BayesianEmbedding(emb_padding_idx+1, y, padding_idx = emb_padding_idx) for x, y in emb_dims])
+        self.emb_layer = BayesianEmbedding(emb_padding_idx+1, 5)
 
         #no_of_embs = sum([y for x, y in emb_dims])
         self.no_of_embs = len(emb_dims)*5
         self.no_of_cont = no_of_cont
 
         # Linear Layers
-        first_lin_layer = nn.Linear(self.no_of_embs + self.no_of_cont, lin_layer_sizes[0])
+        first_lin_layer = BayesianLinear(self.no_of_embs + self.no_of_cont, lin_layer_sizes[0])
 
-        self.lin_layers = nn.ModuleList([first_lin_layer] + [nn.Linear(lin_layer_sizes[i], lin_layer_sizes[i + 1]) for i in range(len(lin_layer_sizes) - 1)])
+        self.lin_layers = nn.ModuleList([first_lin_layer] + [BayesianLinear(lin_layer_sizes[i], lin_layer_sizes[i + 1]) for i in range(len(lin_layer_sizes) - 1)])
 
         # Batch Norm Layers
         self.first_bn_layer = nn.BatchNorm1d(self.no_of_cont)
@@ -61,7 +66,7 @@ class FeedForwardNN(nn.Module):
         self.droput_layers = nn.ModuleList([nn.Dropout(size) for size in lin_layer_dropouts])
         
         # Output Layer
-        self.output_layer = nn.Linear(lin_layer_sizes[-1], n_class)
+        self.output_layer = BayesianLinear(lin_layer_sizes[-1], n_class)
 
     def forward(self, cont_data, cat_data):
         """
@@ -94,6 +99,7 @@ class FeedForwardNN(nn.Module):
         
         return out
 
+@variational_estimator
 class Network0(nn.Module):
     """Wrapper for Feedforward only model with local data"""
     def __init__(self, emb_dims, no_of_cont, lin_layer_sizes, emb_dropout, lin_layer_dropouts, n_class, emb_padding_idx=None):
@@ -107,7 +113,8 @@ class Network0(nn.Module):
         
         return self.model.forward(cont_data, cat_data)
         
-    
+
+@variational_estimator
 class Network1(nn.Module):
     """The expanded-only model"""
     def __init__(self,  in_channels, out_channels, kernel_size, distal_radius, distal_order, distal_fc_dropout, n_class):
@@ -143,7 +150,7 @@ class Network1(nn.Module):
         # 1st conv layer
         self.conv1 = nn.Sequential(
             nn.BatchNorm1d(in_channels), # This is important!
-            nn.Conv1d(in_channels, out_channels, kernel_size, 1, (kernel_size-1)//2), # in_channels, out_channels, kernel_size
+            BayesianConv1d(in_channels, out_channels, kernel_size, stride=1, padding=(kernel_size-1)//2), # in_channels, out_channels, kernel_size
         )
         
         
@@ -155,7 +162,7 @@ class Network1(nn.Module):
         self.maxpool2 = nn.MaxPool1d(3, 3, 1)# kernel_size, stride  
         self.conv2 = nn.Sequential(    
             nn.BatchNorm1d(out_channels),
-            nn.Conv1d(out_channels, out_channels, kernel_size, 1, (kernel_size-1)//2),
+            BayesianConv1d(out_channels, out_channels, kernel_size, stride=1, padding=(kernel_size-1)//2),
             #nn.ReLU(),
         )
         
@@ -165,7 +172,7 @@ class Network1(nn.Module):
         self.maxpool3 = nn.MaxPool1d(3, 3, 1)
         self.conv3 = nn.Sequential(
             nn.BatchNorm1d(out_channels),
-            nn.Conv1d(out_channels, out_channels, kernel_size, 1, (kernel_size-1)//2),
+            BayesianConv1d(out_channels, out_channels, kernel_size, stride=1, padding=(kernel_size-1)//2),
             nn.ReLU(),
         )
         
@@ -176,7 +183,7 @@ class Network1(nn.Module):
         self.distal_fc1 = nn.Sequential(
             nn.BatchNorm1d(cnn_fc_in_size),
             nn.Dropout(distal_fc_dropout), 
-            nn.Linear(cnn_fc_in_size, n_class), 
+            BayesianLinear(cnn_fc_in_size, n_class), 
             #nn.ReLU(),
             
         )
@@ -184,7 +191,7 @@ class Network1(nn.Module):
         # 1st conv layer
         self.conv1_2 = nn.Sequential(
             nn.BatchNorm1d(in_channels), # This is important!
-            nn.Conv1d(in_channels, out_channels, kernel_size, 1, (kernel_size-1)//2), # in_channels, out_channels, kernel_size
+            BayesianConv1d(in_channels, out_channels, kernel_size, stride=1, padding=(kernel_size-1)//2), # in_channels, out_channels, kernel_size
 
         )
         
@@ -197,7 +204,7 @@ class Network1(nn.Module):
         self.maxpool2_2 = nn.MaxPool1d(7, 7, 3)# kernel_size, stride  
         self.conv2_2 = nn.Sequential(    
             nn.BatchNorm1d(out_channels),
-            nn.Conv1d(out_channels, out_channels, kernel_size, 1, (kernel_size-1)//2),
+            BayesianConv1d(out_channels, out_channels, kernel_size, stride=1, padding=(kernel_size-1)//2),
             #nn.ReLU(),
         )
         
@@ -207,7 +214,7 @@ class Network1(nn.Module):
         self.maxpool3_2 = nn.MaxPool1d(3, 3, 1)
         self.conv3_2 = nn.Sequential(
             nn.BatchNorm1d(out_channels),
-            nn.Conv1d(out_channels, out_channels, kernel_size, 1, (kernel_size-1)//2),
+            BayesianConv1d(out_channels, out_channels, kernel_size, stride=1, padding=(kernel_size-1)//2),
             nn.ReLU(),
         )
         
@@ -217,7 +224,7 @@ class Network1(nn.Module):
         self.distal_fc2 = nn.Sequential(
             nn.BatchNorm1d(cnn_fc_in_size),
             nn.Dropout(distal_fc_dropout), 
-            nn.Linear(cnn_fc_in_size, n_class), 
+            BayesianLinear(cnn_fc_in_size, n_class), 
             #nn.ReLU(),
             
         )
@@ -286,7 +293,8 @@ class Network1(nn.Module):
         
         return distal_out
     
-    
+
+@variational_estimator
 class Network2(nn.Module):
     """Combined model with FeedForward and ResNet componets"""
     def __init__(self,  emb_dims, no_of_cont, lin_layer_sizes, emb_dropout, lin_layer_dropouts, in_channels, out_channels, kernel_size, distal_radius, distal_order, distal_fc_dropout, n_class, emb_padding_idx=None):
@@ -318,17 +326,17 @@ class Network2(nn.Module):
         print('emb_padding_idx: ', emb_padding_idx)
         self.no_of_cat = len(emb_dims)
         
-        #self.emb_layers = nn.ModuleList([nn.Embedding(emb_padding_idx+1, y, padding_idx = emb_padding_idx) for x, y in emb_dims])
-        self.emb_layer = nn.Embedding(emb_padding_idx+1, 5)
+        #self.emb_layers = nn.ModuleList([BayesianEmbedding(emb_padding_idx+1, y, padding_idx = emb_padding_idx) for x, y in emb_dims])
+        self.emb_layer = BayesianEmbedding(emb_padding_idx+1, 5)
 
         #no_of_embs = sum([y for x, y in emb_dims])
         self.no_of_embs = len(emb_dims)*5
         self.no_of_cont = no_of_cont
 
         # Linear Layers
-        first_lin_layer = nn.Linear(self.no_of_embs + self.no_of_cont, lin_layer_sizes[0])
+        first_lin_layer = BayesianLinear(self.no_of_embs + self.no_of_cont, lin_layer_sizes[0])
 
-        self.lin_layers = nn.ModuleList([first_lin_layer] + [nn.Linear(lin_layer_sizes[i], lin_layer_sizes[i + 1]) for i in range(len(lin_layer_sizes) - 1)])
+        self.lin_layers = nn.ModuleList([first_lin_layer] + [BayesianLinear(lin_layer_sizes[i], lin_layer_sizes[i + 1]) for i in range(len(lin_layer_sizes) - 1)])
 
         # Batch Norm Layers
         self.first_bn_layer = nn.BatchNorm1d(self.no_of_cont)
@@ -349,7 +357,7 @@ class Network2(nn.Module):
         # 1st conv layer
         self.conv1 = nn.Sequential(
             nn.BatchNorm1d(in_channels), # This is important!
-            nn.Conv1d(in_channels, out_channels, kernel_size, 1, (kernel_size-1)//2), # in_channels, out_channels, kernel_size
+            BayesianConv1d(in_channels, out_channels, kernel_size, stride=1, padding=(kernel_size-1)//2), # in_channels, out_channels, kernel_size
         )
         
         
@@ -361,7 +369,7 @@ class Network2(nn.Module):
         self.maxpool2 = nn.MaxPool1d(3, 3, 1)# kernel_size, stride  
         self.conv2 = nn.Sequential(    
             nn.BatchNorm1d(out_channels),
-            nn.Conv1d(out_channels, out_channels, kernel_size, 1, (kernel_size-1)//2),
+            BayesianConv1d(out_channels, out_channels, kernel_size, stride=1, padding=(kernel_size-1)//2),
             #nn.ReLU(),
         )
         
@@ -371,7 +379,7 @@ class Network2(nn.Module):
         self.maxpool3 = nn.MaxPool1d(3, 3, 1)
         self.conv3 = nn.Sequential(
             nn.BatchNorm1d(out_channels),
-            nn.Conv1d(out_channels, out_channels, kernel_size, 1, (kernel_size-1)//2),
+            BayesianConv1d(out_channels, out_channels, kernel_size, stride=1, padding=(kernel_size-1)//2),
             nn.ReLU(),
         )
         
@@ -382,7 +390,7 @@ class Network2(nn.Module):
         self.distal_fc1 = nn.Sequential(
             nn.BatchNorm1d(cnn_fc_in_size),
             nn.Dropout(distal_fc_dropout), 
-            nn.Linear(cnn_fc_in_size, n_class), 
+            BayesianLinear(cnn_fc_in_size, n_class), 
             #nn.ReLU(),
             
         )
@@ -391,7 +399,7 @@ class Network2(nn.Module):
         # 1st conv layer
         self.conv1_2 = nn.Sequential(
             nn.BatchNorm1d(in_channels), # This is important!
-            nn.Conv1d(in_channels, out_channels, kernel_size, 1, (kernel_size-1)//2), # in_channels, out_channels, kernel_size
+            BayesianConv1d(in_channels, out_channels, kernel_size, stride=1, padding=(kernel_size-1)//2), # in_channels, out_channels, kernel_size
 
         )
         
@@ -404,7 +412,7 @@ class Network2(nn.Module):
         self.maxpool2_2 = nn.MaxPool1d(7, 7, 3)# kernel_size, stride  
         self.conv2_2 = nn.Sequential(    
             nn.BatchNorm1d(out_channels),
-            nn.Conv1d(out_channels, out_channels, kernel_size, 1, (kernel_size-1)//2),
+            BayesianConv1d(out_channels, out_channels, kernel_size, stride=1, padding=(kernel_size-1)//2),
             #nn.ReLU(),
         )
         
@@ -414,7 +422,7 @@ class Network2(nn.Module):
         self.maxpool3_2 = nn.MaxPool1d(3, 3, 1)
         self.conv3_2 = nn.Sequential(
             nn.BatchNorm1d(out_channels),
-            nn.Conv1d(out_channels, out_channels, kernel_size, 1, (kernel_size-1)//2),
+            BayesianConv1d(out_channels, out_channels, kernel_size, stride=1, padding=(kernel_size-1)//2),
             nn.ReLU(),
         )
         
@@ -424,7 +432,7 @@ class Network2(nn.Module):
         self.distal_fc2 = nn.Sequential(
             nn.BatchNorm1d(cnn_fc_in_size),
             nn.Dropout(distal_fc_dropout), 
-            nn.Linear(cnn_fc_in_size, n_class), 
+            BayesianLinear(cnn_fc_in_size, n_class), 
             #nn.ReLU(),
             
         )
@@ -433,7 +441,7 @@ class Network2(nn.Module):
         self.local_fc = nn.Sequential(
             #nn.BatchNorm1d(lin_layer_sizes[-1]),
             #nn.Dropout(0.15),
-            nn.Linear(lin_layer_sizes[-1], n_class), 
+            BayesianLinear(lin_layer_sizes[-1], n_class), 
         )       
     
     def forward(self, local_input, distal_input):
@@ -524,6 +532,7 @@ class Network2(nn.Module):
         
         return out
 
+@variational_estimator
 class Network3(nn.Module):
     """Combined model with FeedForward and ResNet componets"""
     def __init__(self,  emb_dims, no_of_cont, lin_layer_sizes, emb_dropout, lin_layer_dropouts, in_channels, out_channels, kernel_size, distal_radius, distal_order, distal_fc_dropout, n_class, emb_padding_idx=None):
@@ -555,17 +564,17 @@ class Network3(nn.Module):
         print('emb_padding_idx: ', emb_padding_idx)
         self.no_of_cat = len(emb_dims)
         
-        #self.emb_layers = nn.ModuleList([nn.Embedding(emb_padding_idx+1, y, padding_idx = emb_padding_idx) for x, y in emb_dims])
-        self.emb_layer = nn.Embedding(emb_padding_idx+1, 5)
+        #self.emb_layers = nn.ModuleList([BayesianEmbedding(emb_padding_idx+1, y, padding_idx = emb_padding_idx) for x, y in emb_dims])
+        self.emb_layer = BayesianEmbedding(emb_padding_idx+1, 5)
 
         #no_of_embs = sum([y for x, y in emb_dims])
         self.no_of_embs = len(emb_dims)*5
         self.no_of_cont = no_of_cont
 
         # Linear Layers
-        first_lin_layer = nn.Linear(self.no_of_embs, lin_layer_sizes[0])
+        first_lin_layer = BayesianLinear(self.no_of_embs, lin_layer_sizes[0])
 
-        self.lin_layers = nn.ModuleList([first_lin_layer] + [nn.Linear(lin_layer_sizes[i], lin_layer_sizes[i + 1]) for i in range(len(lin_layer_sizes) - 1)])
+        self.lin_layers = nn.ModuleList([first_lin_layer] + [BayesianLinear(lin_layer_sizes[i], lin_layer_sizes[i + 1]) for i in range(len(lin_layer_sizes) - 1)])
 
         # Batch Norm Layers
         #self.first_bn_layer = nn.BatchNorm1d(self.no_of_cont)
@@ -586,7 +595,7 @@ class Network3(nn.Module):
         # 1st conv layer
         self.conv1 = nn.Sequential(
             nn.BatchNorm1d(in_channels), # This is important!
-            nn.Conv1d(in_channels, out_channels, kernel_size, 1, (kernel_size-1)//2), # in_channels, out_channels, kernel_size
+            BayesianConv1d(in_channels, out_channels, kernel_size, stride=1, padding=(kernel_size-1)//2), # in_channels, out_channels, kernel_size
         )
         
         
@@ -598,7 +607,7 @@ class Network3(nn.Module):
         self.maxpool2 = nn.MaxPool1d(3, 3, 1)# kernel_size, stride  
         self.conv2 = nn.Sequential(    
             nn.BatchNorm1d(out_channels),
-            nn.Conv1d(out_channels, out_channels, kernel_size, 1, (kernel_size-1)//2),
+            BayesianConv1d(out_channels, out_channels, kernel_size, stride=1, padding=(kernel_size-1)//2),
             #nn.ReLU(),
         )
         
@@ -608,7 +617,7 @@ class Network3(nn.Module):
         self.maxpool3 = nn.MaxPool1d(3, 3, 1)
         self.conv3 = nn.Sequential(
             nn.BatchNorm1d(out_channels),
-            nn.Conv1d(out_channels, out_channels, kernel_size, 1, (kernel_size-1)//2),
+            BayesianConv1d(out_channels, out_channels, kernel_size, stride=1, padding=(kernel_size-1)//2),
             nn.ReLU(),
         )
         
@@ -619,7 +628,7 @@ class Network3(nn.Module):
         self.distal_fc1 = nn.Sequential(
             nn.BatchNorm1d(cnn_fc_in_size),
             nn.Dropout(distal_fc_dropout), 
-            nn.Linear(cnn_fc_in_size, n_class), 
+            BayesianLinear(cnn_fc_in_size, n_class), 
             #nn.ReLU(),
             
         )
@@ -628,7 +637,7 @@ class Network3(nn.Module):
         # 1st conv layer
         self.conv1_2 = nn.Sequential(
             nn.BatchNorm1d(in_channels), # This is important!
-            nn.Conv1d(in_channels, out_channels, kernel_size, 1, (kernel_size-1)//2), # in_channels, out_channels, kernel_size
+            BayesianConv1d(in_channels, out_channels, kernel_size, stride=1, padding=(kernel_size-1)//2), # in_channels, out_channels, kernel_size
 
         )
         
@@ -641,7 +650,7 @@ class Network3(nn.Module):
         self.maxpool2_2 = nn.MaxPool1d(7, 7, 3)# kernel_size, stride  
         self.conv2_2 = nn.Sequential(    
             nn.BatchNorm1d(out_channels),
-            nn.Conv1d(out_channels, out_channels, kernel_size, 1, (kernel_size-1)//2),
+            BayesianConv1d(out_channels, out_channels, kernel_size, stride=1, padding=(kernel_size-1)//2),
             #nn.ReLU(),
         )
         
@@ -651,7 +660,7 @@ class Network3(nn.Module):
         self.maxpool3_2 = nn.MaxPool1d(3, 3, 1)
         self.conv3_2 = nn.Sequential(
             nn.BatchNorm1d(out_channels),
-            nn.Conv1d(out_channels, out_channels, kernel_size, 1, (kernel_size-1)//2),
+            BayesianConv1d(out_channels, out_channels, kernel_size, stride=1, padding=(kernel_size-1)//2),
             nn.ReLU(),
         )
         
@@ -661,7 +670,7 @@ class Network3(nn.Module):
         self.distal_fc2 = nn.Sequential(
             nn.BatchNorm1d(cnn_fc_in_size),
             nn.Dropout(distal_fc_dropout), 
-            nn.Linear(cnn_fc_in_size, n_class), 
+            BayesianLinear(cnn_fc_in_size, n_class), 
             #nn.ReLU(),
             
         )
@@ -670,14 +679,14 @@ class Network3(nn.Module):
         self.local_fc = nn.Sequential(
             #nn.BatchNorm1d(lin_layer_sizes[-1]),
             #nn.Dropout(0.15),
-            nn.Linear(lin_layer_sizes[-1], n_class), 
+            BayesianLinear(lin_layer_sizes[-1], n_class), 
         ) 
         
         if self.no_of_cont > 0:
             self.local_fc2 = nn.Sequential(
                 nn.BatchNorm1d(self.no_of_cont),
                 nn.Dropout(lin_layer_dropouts[0]),
-                nn.Linear(self.no_of_cont, n_class), 
+                BayesianLinear(self.no_of_cont, n_class), 
             ) 
     
     def forward(self, local_input, distal_input):
@@ -791,15 +800,16 @@ class Network3(nn.Module):
 
 
 # Residual block (according to Jaganathan et al. 2019 Cell)
+@variational_estimator
 class ResBlock(nn.Module):
     """Residual block unit"""
     def __init__(self, in_channels=32, kernel_size=3, stride=1, padding=0, dilation=1):
         super(ResBlock, self).__init__()
         
         self.bn1 = nn.BatchNorm1d(in_channels)
-        self.conv1 = nn.Conv1d(in_channels, in_channels, kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation)  
+        self.conv1 = BayesianConv1d(in_channels, in_channels, kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation)  
         self.bn2 = nn.BatchNorm1d(in_channels)
-        self.conv2 = nn.Conv1d(in_channels, in_channels, kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation)        
+        self.conv2 = BayesianConv1d(in_channels, in_channels, kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation)        
         
         self.layer = nn.Sequential(nn.ReLU(),self.bn1, self.conv1, nn.ReLU(), self.bn2, self.conv2)
 
@@ -811,15 +821,16 @@ class ResBlock(nn.Module):
         
         return out
 
+@variational_estimator
 class ResBlock2(nn.Module):
     """Residual block unit"""
     def __init__(self, in_channels=32, kernel_size=3, stride=1, padding=0, dilation=1):
         super(ResBlock2, self).__init__()
         
         self.bn1 = nn.BatchNorm1d(in_channels)
-        self.conv1 = nn.Conv1d(in_channels, in_channels, kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation)  
+        self.conv1 = BayesianConv1d(in_channels, in_channels, kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation)  
         self.bn2 = nn.BatchNorm1d(in_channels)
-        self.conv2 = nn.Conv1d(in_channels, in_channels, kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation)        
+        self.conv2 = BayesianConv1d(in_channels, in_channels, kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation)        
         
         self.layer = nn.Sequential(self.bn1, nn.ReLU(),self.conv1, self.bn2, nn.ReLU(), self.conv2)
 
@@ -832,6 +843,7 @@ class ResBlock2(nn.Module):
         return out
     
 # Residual block ('bottleneck' version)
+@variational_estimator
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1):
         """Residual block ('bottleneck' version)"""
@@ -841,16 +853,16 @@ class ResidualBlock(nn.Module):
         self.stride = stride
         self.bn1 = nn.BatchNorm1d(in_channels)
         self.relu = nn.ReLU(inplace=True)
-        self.conv1 = nn.Conv1d(in_channels, out_channels//4, 1, 1, bias = False)
+        self.conv1 = BayesianConv1d(in_channels, out_channels//4, 1,  stride=1, bias = False)
         self.bn2 = nn.BatchNorm1d(out_channels//4)
         self.relu = nn.ReLU(inplace=True)
-        self.conv2 = nn.Conv1d(out_channels//4, out_channels//4, 3, stride, padding = 1, bias = False)
+        self.conv2 = BayesianConv1d(out_channels//4, out_channels//4, 3,  stride=stride, padding = 1, bias = False)
         #new_seq_len = (seq_len + 2*padding - kernel_size + stride)//stride
         #seq_len1 = (self.seq_len + 2 * 1 - (3 - stride))//stride
         self.bn3 = nn.BatchNorm1d(out_channels//4)
         self.relu = nn.ReLU(inplace=True)
-        self.conv3 = nn.Conv1d(out_channels//4, out_channels, 1, 1, bias = False)
-        self.conv4 = nn.Conv1d(in_channels, out_channels, 1, stride, bias = False)
+        self.conv3 = BayesianConv1d(out_channels//4, out_channels, 1,  stride=1, bias = False)
+        self.conv4 = BayesianConv1d(in_channels, out_channels, 1,  stride=stride, bias = False)
         #new_seq_len = (seq_len + 2*padding - kernel_size + stride)//stride
         #seq_len1 = (self.seq_len + 2 * 0 - (1 - stride))//stride
         

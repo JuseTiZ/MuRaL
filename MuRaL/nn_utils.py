@@ -30,12 +30,14 @@ def weights_init(m):
                 if 'weight' in p:
                     torch.nn.init.xavier_uniform_(m.__getattr__(p))
 
-def model_predict_m(model, dataloader, criterion, device, n_class, distal=True):
+def model_predict_m(model, dataloader, criterion, device, n_class, distal=True, n_sample=10):
     """Do model prediction using dataloader"""
     model.to(device)
     model.eval()
     
     pred_y = torch.empty(0, n_class).to(device)        
+    # Add for bayesian predicition
+    pred_y_std = torch.empty(0, n_class).to(device)
     total_loss = 0
     
     with torch.no_grad():
@@ -44,14 +46,31 @@ def model_predict_m(model, dataloader, criterion, device, n_class, distal=True):
             cont_x = cont_x.to(device)
             distal_x = distal_x.to(device)
             y  = y.to(device)
-        
-            if distal:
-                preds = model.forward((cont_x, cat_x), distal_x)
-            else:
-                preds = model.forward(cont_x, cat_x)
-            pred_y = torch.cat((pred_y, preds), dim=0)
+
+            # Add for bayesian predicition
+            pred_results = []
+            pred_pro_results = []
+
+            for i in range(n_sample):
+
+                if distal:
+                    preds = model.forward((cont_x, cat_x), distal_x)
+                else:
+                    preds = model.forward(cont_x, cat_x)
+
+                pred_results.append(preds)
+                preds_pro = F.softmax(preds, dim=1)
+                pred_pro_results.append(preds_pro)
+
+            pred_results = torch.stack(pred_results)
+            pred_pro_results = torch.stack(pred_pro_results)
+            means = pred_pro_results.mean(axis=0)
+            stds = pred_pro_results.std(axis=0)
+
+            pred_y = torch.cat((pred_y, means), dim=0)
+            pred_y_std = torch.cat((pred_y_std, stds), dim=0)
                 
-            loss = criterion(preds, y.long().squeeze(1))
+            loss = criterion(pred_results.mean(axis=0), y.long().squeeze(1))
             total_loss += loss.item()
             
             if device == torch.device('cpu'):
@@ -59,4 +78,4 @@ def model_predict_m(model, dataloader, criterion, device, n_class, distal=True):
                     #print('in the model_predict_m:', device)
                     sys.stdout.flush()
 
-    return pred_y, total_loss
+    return pred_y, pred_y_std, total_loss

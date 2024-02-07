@@ -343,16 +343,23 @@ def main():
         dataloader = DataLoader(dataset_test, batch_size=pred_batch_size, shuffle=False, num_workers=0)   
 
     # Do the prediction
-    pred_y, test_total_loss = model_predict_m(model, dataloader, criterion, device, n_class, distal=True)
-    
+    # pred_y, test_total_loss = model_predict_m(model, dataloader, criterion, device, n_class, distal=True)
+    pred_y, pred_y_std, test_total_loss = model_predict_m(model, dataloader, criterion, device, n_class, distal=True)
+
     # Print some data for debugging
-    print('pred_y:', F.softmax(pred_y[1:10], dim=1))
-    for i in range(1, n_class):
-        print('min and max of pred_y: type', i, np.min(to_np(F.softmax(pred_y, dim=1))[:,i]), np.max(to_np(F.softmax(pred_y, dim=1))[:,i]))
+    # print('pred_y:', F.softmax(pred_y[1:10], dim=1))
+    # for i in range(1, n_class):
+    #     print('min and max of pred_y: type', i, np.min(to_np(F.softmax(pred_y, dim=1))[:,i]), np.max(to_np(F.softmax(pred_y, dim=1))[:,i]))
         
+    print('pred_y:', pred_y[1:10])
+    for i in range(1, n_class):
+        print('min and max of pred_y: type', i, np.min(to_np(pred_y)[:,i]), np.max(to_np(pred_y)[:,i]))
+          
     # Get the predicted probabilities, as the returns of model are logits    
-    y_prob = pd.DataFrame(data=to_np(F.softmax(pred_y, dim=1)), columns=prob_names)
-    
+    y_prob = pd.DataFrame(data=to_np(pred_y), columns=prob_names)
+    y_std = pd.DataFrame(to_np(pred_y_std), columns=prob_names)
+    y_prob_withstd = y_prob.astype(str) + " ± " + y_std.astype(str)
+
     # Do probability calibration using saved calibrator
     if calibrator_path != '':
         with open(calibrator_path, 'rb') as fcal:   
@@ -364,13 +371,21 @@ def main():
     print('Mean Loss, Total Loss, Test Size:', test_total_loss/test_size, test_total_loss, test_size)
     
     # Combine data 
-    data_and_prob = pd.concat([data_local_test, y_prob], axis=1)         
+    data_and_prob = pd.concat([data_local_test, y_prob], axis=1)
+    # Bayesian
+    data_and_prob_and_std = pd.concat([data_local_test, y_prob_withstd], axis=1)
 
     # Write the prediction
     test_pred_df = data_and_prob[['mut_type'] + prob_names]
     pred_df = pd.concat((test_bed.to_dataframe()[['chrom', 'start', 'end', 'strand']], test_pred_df), axis=1)
     pred_df.columns = ['chrom', 'start', 'end', 'strand', 'mut_type'] +  prob_names
     pred_df.to_csv(pred_file, sep='\t', float_format='%.4g', index=False)
+
+    # Write the prediction(Bayesian)
+    test_pred_df = data_and_prob_and_std[['mut_type'] + prob_names]
+    pred_df = pd.concat((test_bed.to_dataframe()[['chrom', 'start', 'end', 'strand']], test_pred_df), axis=1)
+    pred_df.columns = ['chrom', 'start', 'end', 'strand', 'mut_type'] +  prob_names
+    pred_df.to_csv('bayesian_test_pred_2.tsv', sep='\t', index=False)
     
     #do k-mer evaluation
     if len(kmer_corr) > 0:

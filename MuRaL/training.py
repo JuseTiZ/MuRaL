@@ -40,7 +40,7 @@ from MuRaL.evaluation import *
 #from torchsampler import ImbalancedDatasetSampler
 
 
-def train(config, args, checkpoint_dir=None):
+def train(config, args, checkpoint_dir=None, sample_nbr=3, complexity_cost_weight=1):
     """
     Training funtion.
     
@@ -282,13 +282,15 @@ def train(config, args, checkpoint_dir=None):
             model.distal_fc[-1].weight.requires_grad = True
             model.distal_fc[-1].bias.requires_grad = True
 
-        if not config['init_fc_with_pretrained']:
-            # Re-initialize fc layers
-            model.local_fc[-1].apply(weights_init)
-            model.distal_fc[-1].apply(weights_init)    
+        # For bayesian
+        # if not config['init_fc_with_pretrained']:
+        #     # Re-initialize fc layers
+        #     model.local_fc[-1].apply(weights_init)
+        #     model.distal_fc[-1].apply(weights_init)    
     else:
         # Initiating weights of the models;
-        model.apply(weights_init)
+        # model.apply(weights_init)
+        pass
     
     # Set loss function
     criterion = torch.nn.CrossEntropyLoss(reduction='sum')
@@ -363,12 +365,21 @@ def train(config, args, checkpoint_dir=None):
             distal_x = distal_x.to(device)
             y  = y.to(device)
 
+            optimizer.zero_grad()
 
             # Forward Pass
-            preds = model.forward((cont_x, cat_x), distal_x)
-            loss = criterion(preds, y.long().squeeze())
-                   
-            optimizer.zero_grad()
+            # preds = model.forward((cont_x, cat_x), distal_x)
+            # loss = criterion(preds, y.long().squeeze())
+
+            # For bayesian layers
+            loss = 0
+
+            for _ in range(sample_nbr):
+                preds = model.forward((cont_x, cat_x), distal_x)
+                loss += criterion(preds, y.long().squeeze())
+                # loss += model.nn_kl_divergence() * complexity_cost_weight
+            loss = loss / sample_nbr
+
             loss.backward()
             
             #Clips gradient norm to avoid exploding gradients
@@ -401,10 +412,11 @@ def train(config, args, checkpoint_dir=None):
                 #print('model.conv1[0].weight.grad:', model.conv1[0].weight.grad)
             #print('model.conv1.0.weight.grad:', model.conv1.0.weight)
 
-            valid_pred_y, valid_total_loss = model_predict_m(model, dataloader_valid, criterion, device, n_class, distal=True)
+            valid_pred_y, valid_pred_y_std, valid_total_loss = model_predict_m(model, dataloader_valid, criterion, device, n_class, distal=True, n_sample=sample_nbr)
 
-            valid_y_prob = pd.DataFrame(data=to_np(F.softmax(valid_pred_y, dim=1)), columns=prob_names)
-            
+            # valid_y_prob = pd.DataFrame(data=to_np(F.softmax(valid_pred_y, dim=1)), columns=prob_names)
+            valid_y_prob = pd.DataFrame(data=to_np(valid_pred_y), columns=prob_names)
+
             if not valid_file:
                 valid_data_and_prob = pd.concat([data_local.iloc[dataset_valid.indices, ].reset_index(drop=True), valid_y_prob], axis=1)
                 
