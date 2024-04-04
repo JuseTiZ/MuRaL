@@ -204,16 +204,6 @@ def parse_arguments(parser):
                           Size of mini batches for model training. Default: 128.
                           """ ).strip())
     
-    learn_args.add_argument('--sample_nbr', type=int, metavar='INT', default=3,
-                          help=textwrap.dedent("""
-                          The number of training times for the same batch of data. Default: 3.
-                          """ ).strip())
-    
-    learn_args.add_argument('--complexity_cost_weight', type=float, metavar='FLOAT', default=0,
-                          help=textwrap.dedent("""
-                          Penalty weight for computational complexity. Default: 0.
-                          """ ).strip())
-
 #    learn_args.add_argument('--ImbSampler', default=False, action='store_true', 
 #                          help=textwrap.dedent("""
 #                          Use ImbalancedDatasetSampler for dataloader.

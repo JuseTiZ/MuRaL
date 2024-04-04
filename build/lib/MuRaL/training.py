@@ -40,7 +40,7 @@ from MuRaL.evaluation import *
 #from torchsampler import ImbalancedDatasetSampler
 
 
-def train(config, args, checkpoint_dir=None):
+def train(config, args, checkpoint_dir=None, sample_nbr=3, complexity_cost_weight=1):
     """
     Training funtion.
     
@@ -55,8 +55,6 @@ def train(config, args, checkpoint_dir=None):
     valid_file = args.validation_data
     ref_genome= args.ref_genome
     n_h5_files = args.n_h5_files
-    sample_nbr = args.sample_nbr
-    complexity_cost_weight = args.complexity_cost_weight
 
     local_radius = args.local_radius
     local_order = args.local_order
@@ -379,7 +377,7 @@ def train(config, args, checkpoint_dir=None):
             for _ in range(sample_nbr):
                 preds = model.forward((cont_x, cat_x), distal_x)
                 loss += criterion(preds, y.long().squeeze())
-                loss += model.nn_kl_divergence() * complexity_cost_weight
+                # loss += model.nn_kl_divergence() * complexity_cost_weight
             loss = loss / sample_nbr
 
             loss.backward()

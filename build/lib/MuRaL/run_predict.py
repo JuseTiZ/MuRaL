@@ -109,12 +109,6 @@ def parse_arguments(parser):
                           e.g., "10000 50000". Default: no value.
                           """ ).strip())
     
-    optional.add_argument('--sampletime', type=int, metavar='INT', default=10,
-                          help=textwrap.dedent("""
-                          The number of samples run to calculate the standard deviation (SD).
-                          Default: 10.
-                          """ ).strip())
-    
     optional.add_argument('-v', '--version', action='version',
                         version='%(prog)s {}'.format(__version__))
     
@@ -207,7 +201,6 @@ def main():
     
     kmer_corr = args.kmer_corr
     region_corr = args.region_corr
-    n_sample = args.sampletime
 
     # Load model config (hyperparameters)
     if model_config_path != '':
@@ -351,7 +344,7 @@ def main():
 
     # Do the prediction
     # pred_y, test_total_loss = model_predict_m(model, dataloader, criterion, device, n_class, distal=True)
-    pred_y, pred_y_std, test_total_loss = model_predict_m(model, dataloader, criterion, device, n_class, distal=True, n_sample=n_sample)
+    pred_y, pred_y_std, test_total_loss = model_predict_m(model, dataloader, criterion, device, n_class, distal=True)
 
     # Print some data for debugging
     # print('pred_y:', F.softmax(pred_y[1:10], dim=1))
@@ -383,16 +376,16 @@ def main():
     data_and_prob_and_std = pd.concat([data_local_test, y_prob_withstd], axis=1)
 
     # Write the prediction
-    # test_pred_df = data_and_prob[['mut_type'] + prob_names]
-    # pred_df = pd.concat((test_bed.to_dataframe()[['chrom', 'start', 'end', 'strand']], test_pred_df), axis=1)
-    # pred_df.columns = ['chrom', 'start', 'end', 'strand', 'mut_type'] +  prob_names
-    # pred_df.to_csv(pred_file, sep='\t', float_format='%.4g', index=False)
+    test_pred_df = data_and_prob[['mut_type'] + prob_names]
+    pred_df = pd.concat((test_bed.to_dataframe()[['chrom', 'start', 'end', 'strand']], test_pred_df), axis=1)
+    pred_df.columns = ['chrom', 'start', 'end', 'strand', 'mut_type'] +  prob_names
+    pred_df.to_csv(pred_file, sep='\t', float_format='%.4g', index=False)
 
     # Write the prediction(Bayesian)
     test_pred_df = data_and_prob_and_std[['mut_type'] + prob_names]
     pred_df = pd.concat((test_bed.to_dataframe()[['chrom', 'start', 'end', 'strand']], test_pred_df), axis=1)
     pred_df.columns = ['chrom', 'start', 'end', 'strand', 'mut_type'] +  prob_names
-    pred_df.to_csv(pred_file, sep='\t', index=False)
+    pred_df.to_csv('bayesian_test_pred_2.tsv', sep='\t', index=False)
     
     #do k-mer evaluation
     if len(kmer_corr) > 0:
@@ -406,9 +399,6 @@ def main():
    
     # Calculate regional correlations for a few window sizes
     #for win_size in [10000, 50000, 200000]:
-    test_pred_df = data_and_prob[['mut_type'] + prob_names]
-    pred_df = pd.concat((test_bed.to_dataframe()[['chrom', 'start', 'end', 'strand']], test_pred_df), axis=1)
-    pred_df.columns = ['chrom', 'start', 'end', 'strand', 'mut_type'] +  prob_names
     if len(region_corr) > 0:
         if min(region_corr) <=0:
             print('Warning: please provide  positive mumbers for window sizes. No regional correlation was calculated.')
